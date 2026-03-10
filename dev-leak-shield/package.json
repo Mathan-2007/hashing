@@ -1,0 +1,55 @@
+{
+  "name": "dev-leak-shield",
+  "displayName": "DevLeakShield",
+  "description": "Protects clipboard code by encoding sensitive values before they leave VS Code and decoding them when pasted back.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:devLeakShield.secureCopy",
+    "onCommand:devLeakShield.securePaste"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "devLeakShield.secureCopy",
+        "title": "DevLeakShield: Secure Copy"
+      },
+      {
+        "command": "devLeakShield.securePaste",
+        "title": "DevLeakShield: Secure Paste"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "devLeakShield.secureCopy",
+        "key": "ctrl+c",
+        "mac": "cmd+c",
+        "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+        "command": "devLeakShield.securePaste",
+        "key": "ctrl+v",
+        "mac": "cmd+v",
+        "when": "editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "lint": "echo 'No linter configured'"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  }
+}
