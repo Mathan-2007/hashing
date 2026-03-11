@@ -1,16 +1,16 @@
 import * as crypto from "crypto";
+import { SESSION_KEY, IV } from "./cryptoSession";
 
-const chars =
-"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-={}[]<>?/";
+export function encodeSecret(text: string): string {
 
-export function encodeSecret(length: number = 20): string {
+    const cipher = crypto.createCipheriv(
+        "aes-256-cbc",
+        SESSION_KEY,
+        IV
+    );
 
-    let result = "";
+    let encrypted = cipher.update(text, "utf8", "base64");
+    encrypted += cipher.final("base64");
 
-    for (let i = 0; i < length; i++) {
-        const index = crypto.randomInt(0, chars.length);
-        result += chars[index];
-    }
-
-    return "ENC_" + result;
+    return "ENC_" + encrypted;
 }

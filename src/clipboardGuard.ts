@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { detectSecrets } from "./secretDetector";
 import { encodeSecret } from "./encoder";
-import { storeSecret } from "./storage";
 
 export async function secureCopy() {
 
@@ -23,10 +22,7 @@ export async function secureCopy() {
 
     for (let secret of secrets) {
 
-        const encoded = encodeSecret();
-
-        storeSecret(encoded, secret);
-
+        const encoded = encodeSecret(secret);
         text = text.replace(secret, encoded);
     }
 

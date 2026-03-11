@@ -1,8 +1,18 @@
-export function decode(encoded: string, map: any) {
+import * as crypto from "crypto";
+import { SESSION_KEY, IV } from "./cryptoSession";
 
-    if (map[encoded]) {
-        return map[encoded];
-    }
+export function decodeSecret(text: string): string {
 
-    return encoded;
+    const value = text.replace("ENC_", "");
+
+    const decipher = crypto.createDecipheriv(
+        "aes-256-cbc",
+        SESSION_KEY,
+        IV
+    );
+
+    let decrypted = decipher.update(value, "base64", "utf8");
+    decrypted += decipher.final("utf8");
+
+    return decrypted;
 }

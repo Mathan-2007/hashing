@@ -1,14 +1,92 @@
 import * as vscode from "vscode";
-import { secureCopy } from "./clipboardGuard";
-import { secretMap, getOriginal } from "./storage";
+import * as crypto from "crypto";
+import { detectSecrets } from "./secretDetector";
 
-export function activate(context: vscode.ExtensionContext) {
+/*
+SESSION KEY
+Generated every time VS Code starts
+*/
+const SESSION_KEY = crypto.randomBytes(32);
+const IV = crypto.randomBytes(16);
 
-    const copyCommand = vscode.commands.registerCommand(
-        "devLeakShield.secureCopy",
-        secureCopy
+/*
+AES ENCODE
+*/
+function encodeSecret(text: string): string {
+
+    const cipher = crypto.createCipheriv(
+        "aes-256-cbc",
+        SESSION_KEY,
+        IV
     );
 
+    let encrypted = cipher.update(text, "utf8", "base64");
+    encrypted += cipher.final("base64");
+
+    return "ENC_" + encrypted;
+}
+
+/*
+AES DECODE
+*/
+function decodeSecret(text: string): string {
+
+    const value = text.replace("ENC_", "");
+
+    const decipher = crypto.createDecipheriv(
+        "aes-256-cbc",
+        SESSION_KEY,
+        IV
+    );
+
+    let decrypted = decipher.update(value, "base64", "utf8");
+    decrypted += decipher.final("utf8");
+
+    return decrypted;
+}
+
+/*
+EXTENSION START
+*/
+export function activate(context: vscode.ExtensionContext) {
+
+    console.log("DevLeakShield activated");
+
+    /*
+    COPY INTERCEPT
+    */
+    const copyCommand = vscode.commands.registerCommand(
+        "devLeakShield.secureCopy",
+        async () => {
+
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) return;
+
+            let text = editor.document.getText(editor.selection);
+
+            if (!text) {
+                const line = editor.document.lineAt(editor.selection.active.line);
+                text = line.text;
+            }
+
+            const secrets = detectSecrets(text);
+
+            for (let secret of secrets) {
+
+                const encoded = encodeSecret(secret);
+
+                text = text.replace(secret, encoded);
+            }
+
+            await vscode.env.clipboard.writeText(text);
+
+            vscode.window.showInformationMessage("Secrets encoded before copy");
+        }
+    );
+
+    /*
+    PASTE INTERCEPT
+    */
     const pasteCommand = vscode.commands.registerCommand(
         "devLeakShield.securePaste",
         async () => {
@@ -18,12 +96,23 @@ export function activate(context: vscode.ExtensionContext) {
 
             let text = await vscode.env.clipboard.readText();
 
-            for (let key of Object.keys(secretMap)) {
+            const matches = text.match(/ENC_[A-Za-z0-9+/=]+/g);
 
-                const original = getOriginal(key);
+            if (matches) {
 
-                if (original) {
-                    text = text.replace(key, original);
+                for (let token of matches) {
+
+                    try {
+
+                        const decoded = decodeSecret(token);
+
+                        text = text.replace(token, decoded);
+
+                    } catch (err) {
+
+                        console.log("Decode failed:", err);
+
+                    }
                 }
             }
 
