@@ -1,0 +1,69 @@
+{
+  "name": "dev-leak-shield",
+  "displayName": "DevLeakShield",
+  "description": "Protect secrets when copying code to AI chatbots",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:devLeakShield.secureCopy",
+    "onCommand:devLeakShield.securePaste"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "keybindings": [
+      {
+        "command": "devLeakShield.secureCopy",
+        "key": "ctrl+c",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "devLeakShield.securePaste",
+        "key": "ctrl+v",
+        "when": "editorTextFocus"
+      }
+    ],
+    "commands": [
+      {
+        "command": "devLeakShield.secureCopy",
+        "title": "Secure Copy"
+      },
+      {
+        "command": "devLeakShield.securePaste",
+        "title": "Secure Paste"
+      },
+      {
+        "command": "devLeakShield.maskSecrets",
+        "title": "Mask Secrets For AI"
+      },
+      {
+        "command": "devLeakShield.restoreSecrets",
+        "title": "Restore Secrets"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.37",
+    "@types/vscode": "^1.110.0",
+    "typescript": "^5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mathan-2007/hashing.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Mathan-2007/hashing/issues"
+  },
+  "homepage": "https://github.com/Mathan-2007/hashing#readme"
+}
