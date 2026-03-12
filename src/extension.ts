@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as crypto from "crypto";
 import { detectSecrets } from "./secretDetector";
+import { maskEditorSecrets, restoreEditorSecrets } from "./editorMasker";
 
 /*
 SESSION KEY
@@ -64,6 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             let text = editor.document.getText(editor.selection);
 
+            // If nothing selected copy current line
             if (!text) {
                 const line = editor.document.lineAt(editor.selection.active.line);
                 text = line.text;
@@ -123,8 +125,44 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    /*
+    MASK SECRETS IN EDITOR (for Copilot / AI tools)
+    */
+    const maskCommand = vscode.commands.registerCommand(
+        "devLeakShield.maskSecrets",
+        async () => {
+
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) return;
+
+            await maskEditorSecrets(editor);
+
+            vscode.window.showInformationMessage("Secrets masked for AI tools");
+
+        }
+    );
+
+    /*
+    RESTORE ORIGINAL SECRETS
+    */
+    const restoreCommand = vscode.commands.registerCommand(
+        "devLeakShield.restoreSecrets",
+        async () => {
+
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) return;
+
+            await restoreEditorSecrets(editor);
+
+            vscode.window.showInformationMessage("Secrets restored");
+
+        }
+    );
+
     context.subscriptions.push(copyCommand);
     context.subscriptions.push(pasteCommand);
+    context.subscriptions.push(maskCommand);
+    context.subscriptions.push(restoreCommand);
 }
 
 export function deactivate() {}

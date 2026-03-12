@@ -16,17 +16,17 @@
   "main": "./out/extension.js",
   "contributes": {
     "keybindings": [
-  {
-    "command": "devLeakShield.secureCopy",
-    "key": "ctrl+c",
-    "when": "editorTextFocus"
-  },
-  {
-    "command": "devLeakShield.securePaste",
-    "key": "ctrl+v",
-    "when": "editorTextFocus"
-  }
-],
+      {
+        "command": "devLeakShield.secureCopy",
+        "key": "ctrl+c",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "devLeakShield.securePaste",
+        "key": "ctrl+v",
+        "when": "editorTextFocus"
+      }
+    ],
     "commands": [
       {
         "command": "devLeakShield.secureCopy",
@@ -35,6 +35,14 @@
       {
         "command": "devLeakShield.securePaste",
         "title": "Secure Paste"
+      },
+      {
+        "command": "devLeakShield.maskSecrets",
+        "title": "Mask Secrets For AI"
+      },
+      {
+        "command": "devLeakShield.restoreSecrets",
+        "title": "Restore Secrets"
       }
     ]
   },

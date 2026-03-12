@@ -5,6 +5,7 @@ exports.deactivate = deactivate;
 const vscode = require("vscode");
 const crypto = require("crypto");
 const secretDetector_1 = require("./secretDetector");
+const editorMasker_1 = require("./editorMasker");
 /*
 SESSION KEY
 Generated every time VS Code starts
@@ -43,6 +44,7 @@ function activate(context) {
         if (!editor)
             return;
         let text = editor.document.getText(editor.selection);
+        // If nothing selected copy current line
         if (!text) {
             const line = editor.document.lineAt(editor.selection.active.line);
             text = line.text;
@@ -79,8 +81,30 @@ function activate(context) {
             editBuilder.insert(editor.selection.start, text);
         });
     });
+    /*
+    MASK SECRETS IN EDITOR (for Copilot / AI tools)
+    */
+    const maskCommand = vscode.commands.registerCommand("devLeakShield.maskSecrets", async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor)
+            return;
+        await (0, editorMasker_1.maskEditorSecrets)(editor);
+        vscode.window.showInformationMessage("Secrets masked for AI tools");
+    });
+    /*
+    RESTORE ORIGINAL SECRETS
+    */
+    const restoreCommand = vscode.commands.registerCommand("devLeakShield.restoreSecrets", async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor)
+            return;
+        await (0, editorMasker_1.restoreEditorSecrets)(editor);
+        vscode.window.showInformationMessage("Secrets restored");
+    });
     context.subscriptions.push(copyCommand);
     context.subscriptions.push(pasteCommand);
+    context.subscriptions.push(maskCommand);
+    context.subscriptions.push(restoreCommand);
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map
