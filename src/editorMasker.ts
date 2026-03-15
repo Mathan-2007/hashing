@@ -3,33 +3,46 @@ import { detectSecrets } from "./secretDetector";
 import { encodeSecret } from "./encoder";
 import { decodeSecret } from "./decoder";
 
-let maskedSecrets: Map<string,string> = new Map();
+/*
+Store mapping between encoded value and original secret
+*/
+const maskedSecrets: Map<string, string> = new Map();
 
 /*
 MASK SECRETS IN EDITOR
+This replaces secrets with encrypted tokens
 */
 export async function maskEditorSecrets(editor: vscode.TextEditor) {
 
-    const text = editor.document.getText();
+    const document = editor.document;
+    const text = document.getText();
 
     const secrets = detectSecrets(text);
 
+    if (secrets.length === 0) return;
+
     await editor.edit(editBuilder => {
 
-        for (let secret of secrets) {
+        for (const secret of secrets) {
+
+            if (secret.startsWith("ENC_")) continue;
 
             const encoded = encodeSecret(secret);
 
             maskedSecrets.set(encoded, secret);
 
-            const startIndex = text.indexOf(secret);
+            let index = text.indexOf(secret);
 
-            if (startIndex === -1) continue;
+            while (index !== -1) {
 
-            const start = editor.document.positionAt(startIndex);
-            const end = editor.document.positionAt(startIndex + secret.length);
+                const start = document.positionAt(index);
+                const end = document.positionAt(index + secret.length);
 
-            editBuilder.replace(new vscode.Range(start,end), encoded);
+                editBuilder.replace(new vscode.Range(start, end), encoded);
+
+                index = text.indexOf(secret, index + secret.length);
+            }
+
         }
 
     });
@@ -37,24 +50,29 @@ export async function maskEditorSecrets(editor: vscode.TextEditor) {
 }
 
 /*
-RESTORE ORIGINAL VALUES
+RESTORE ORIGINAL SECRETS
+Used when saving file
 */
 export async function restoreEditorSecrets(editor: vscode.TextEditor) {
 
-    const text = editor.document.getText();
+    const document = editor.document;
+    const text = document.getText();
 
     await editor.edit(editBuilder => {
 
-        for (let [encoded, original] of maskedSecrets.entries()) {
+        for (const [encoded, original] of maskedSecrets.entries()) {
 
-            const startIndex = text.indexOf(encoded);
+            let index = text.indexOf(encoded);
 
-            if (startIndex === -1) continue;
+            while (index !== -1) {
 
-            const start = editor.document.positionAt(startIndex);
-            const end = editor.document.positionAt(startIndex + encoded.length);
+                const start = document.positionAt(index);
+                const end = document.positionAt(index + encoded.length);
 
-            editBuilder.replace(new vscode.Range(start,end), original);
+                editBuilder.replace(new vscode.Range(start, end), original);
+
+                index = text.indexOf(encoded, index + encoded.length);
+            }
 
         }
 

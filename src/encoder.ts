@@ -1,16 +1,25 @@
 import * as crypto from "crypto";
-import { SESSION_KEY, IV } from "./cryptoSession";
+import { SESSION_KEY } from "./cryptoSession";
 
-export function encodeSecret(text: string): string {
+/*
+Encrypt a secret using AES-256
+Returns: ENC_<IV>:<encrypted_data>
+*/
+export function encodeSecret(secret: string): string {
+
+    // generate unique IV for each encryption
+    const iv = crypto.randomBytes(16);
 
     const cipher = crypto.createCipheriv(
         "aes-256-cbc",
         SESSION_KEY,
-        IV
+        iv
     );
 
-    let encrypted = cipher.update(text, "utf8", "base64");
+    let encrypted = cipher.update(secret, "utf8", "base64");
     encrypted += cipher.final("base64");
 
-    return "ENC_" + encrypted;
+    const ivString = iv.toString("base64");
+
+    return `ENC_${ivString}:${encrypted}`;
 }
