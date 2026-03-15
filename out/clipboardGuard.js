@@ -26,7 +26,7 @@ async function secureCopy() {
     }
     const secrets = (0, secretDetector_1.detectSecrets)(text);
     for (let secret of secrets) {
-        if (secret.startsWith("ENC_"))
+        if (secret.startsWith("HIDDEN_SECRET_DO_NOT_DECODE_"))
             continue;
         const encoded = (0, encoder_1.encodeSecret)(secret);
         text = text.replaceAll(secret, encoded);
@@ -43,12 +43,13 @@ async function securePaste() {
     if (!editor)
         return;
     let text = await vscode.env.clipboard.readText();
-    const matches = text.match(/ENC_[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+/g);
+    const matches = text.match(/HIDDEN_SECRET_DO_NOT_DECODE_[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+/g);
     if (matches) {
         for (let token of matches) {
             try {
                 const decoded = (0, decoder_1.decodeSecret)(token);
-                text = text.replace(token, decoded);
+                // Replace ALL instances of the copied secret
+                text = text.replaceAll(token, decoded);
             }
             catch (err) {
                 console.log("DevLeakShield decode failed:", err);
@@ -56,7 +57,8 @@ async function securePaste() {
         }
     }
     editor.edit(editBuilder => {
-        editBuilder.insert(editor.selection.start, text);
+        // Replace the current selection with the pasted text (native behavior)
+        editBuilder.replace(editor.selection, text);
     });
 }
 //# sourceMappingURL=clipboardGuard.js.map

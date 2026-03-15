@@ -1,18 +1,21 @@
 import * as crypto from "crypto";
-import { SESSION_KEY } from "./cryptoSession";
+import { getSessionKey } from "./cryptoSession";
 
 /*
 Encrypt a secret using AES-256
-Returns: ENC_<IV>:<encrypted_data>
+Returns: HIDDEN_SECRET_DO_NOT_DECODE_<IV>:<encrypted_data>
 */
 export function encodeSecret(secret: string): string {
 
-    // generate unique IV for each encryption
-    const iv = crypto.randomBytes(16);
+    // Use deterministic IV (md5 hash of secret produces exactly 16 bytes)
+    // This guarantees the string is encrypted without random fluctuations
+    const iv = crypto.createHash("md5").update(secret).digest();
+
+    const sessionKey = getSessionKey();
 
     const cipher = crypto.createCipheriv(
         "aes-256-cbc",
-        SESSION_KEY,
+        sessionKey,
         iv
     );
 
@@ -21,5 +24,5 @@ export function encodeSecret(secret: string): string {
 
     const ivString = iv.toString("base64");
 
-    return `ENC_${ivString}:${encrypted}`;
+    return `HIDDEN_SECRET_DO_NOT_DECODE_${ivString}:${encrypted}`;
 }

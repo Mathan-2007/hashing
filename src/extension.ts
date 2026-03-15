@@ -2,134 +2,69 @@ import * as vscode from "vscode";
 import { maskEditorSecrets, restoreEditorSecrets } from "./editorMasker";
 import { secureCopy, securePaste } from "./clipboardGuard";
 
+import { initCryptoSession } from "./cryptoSession";
+import { lockWorkspace, unlockWorkspace } from "./workspaceLocker";
+
 /*
 Prevent infinite masking loops
 */
 let masking = false;
 
-/*
-EXTENSION START
-*/
+export async function activate(context: vscode.ExtensionContext) {
 
-// MASK CURRENT EDITOR WHEN EXTENSION STARTS
-if (vscode.window.activeTextEditor) {
-
-    masking = true;
-
-    maskEditorSecrets(vscode.window.activeTextEditor).then(() => {
-        masking = false;
-    });
-
-}
-
-export function activate(context: vscode.ExtensionContext) {
+    // Initialize Persistent Memory Crypto Key
+    await initCryptoSession(context);
 
     console.log("DevLeakShield activated");
 
     /*
-    AUTO MASK WHEN FILE OPENS
-    */
-    context.subscriptions.push(
-        vscode.workspace.onDidOpenTextDocument(async (document) => {
-
-            const editor = vscode.window.visibleTextEditors.find(
-                e => e.document === document
-            );
-
-            if (!editor) return;
-
-            if (masking) return;
-
-            masking = true;
-
-            await maskEditorSecrets(editor);
-
-            masking = false;
-
-        })
-    );
-
-    /*
-    MASK WHEN FILE CONTENT CHANGES
-    */
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument(async (event) => {
-
-            const editor = vscode.window.activeTextEditor;
-
-            if (!editor) return;
-
-            if (event.document !== editor.document) return;
-
-            if (masking) return;
-
-            masking = true;
-
-            await maskEditorSecrets(editor);
-
-            masking = false;
-
-        })
-    );
-
-    /*
-    RESTORE SECRETS BEFORE FILE SAVE
-    */
-    context.subscriptions.push(
-        vscode.workspace.onWillSaveTextDocument(async (event) => {
-
-            const editor = vscode.window.visibleTextEditors.find(
-                e => e.document === event.document
-            );
-
-            if (!editor) return;
-
-            await restoreEditorSecrets(editor);
-
-        })
-    );
-    context.subscriptions.push(
-    vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-
-        if (!editor) return;
-
-        if (masking) return;
-
-        masking = true;
-
-        await maskEditorSecrets(editor);
-
-        masking = false;
-
-    })
-);
-
-    /*
     SECURE COPY COMMAND
     */
-    const copyCommand = vscode.commands.registerCommand(
-        "devLeakShield.secureCopy",
-        async () => {
+    context.subscriptions.push(
+        vscode.commands.registerCommand("devLeakShield.secureCopy", async () => {
             await secureCopy();
-        }
+        })
     );
 
     /*
     SECURE PASTE COMMAND
     */
-    const pasteCommand = vscode.commands.registerCommand(
-        "devLeakShield.securePaste",
-        async () => {
+    context.subscriptions.push(
+        vscode.commands.registerCommand("devLeakShield.securePaste", async () => {
             await securePaste();
-        }
+        })
     );
 
-    context.subscriptions.push(copyCommand);
-    context.subscriptions.push(pasteCommand);
+    /*
+    WORKSPACE AI LOCK COMMANDS
+    */
+    context.subscriptions.push(
+        vscode.commands.registerCommand("devLeakShield.maskSecrets", async () => {
+            masking = true;
+            try {
+                await lockWorkspace();
+                vscode.window.showInformationMessage("Workspace Locked for AI");
+            } finally {
+                masking = false;
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("devLeakShield.restoreSecrets", async () => {
+            masking = true;
+            try {
+                await unlockWorkspace();
+                vscode.window.showInformationMessage("Workspace Unlocked securely");
+            } finally {
+                masking = false;
+            }
+        })
+    );
 
 }
 
 /*
 EXTENSION STOP
 */
-export function deactivate() {}
+export function deactivate() { }

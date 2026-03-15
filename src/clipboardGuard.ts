@@ -31,7 +31,7 @@ export async function secureCopy() {
 
     for (let secret of secrets) {
 
-        if (secret.startsWith("ENC_")) continue;
+        if (secret.startsWith("HIDDEN_SECRET_DO_NOT_DECODE_")) continue;
 
         const encoded = encodeSecret(secret);
 
@@ -58,7 +58,7 @@ export async function securePaste() {
 
     let text = await vscode.env.clipboard.readText();
 
-    const matches = text.match(/ENC_[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+/g);
+    const matches = text.match(/HIDDEN_SECRET_DO_NOT_DECODE_[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+/g);
 
     if (matches) {
 
@@ -67,8 +67,8 @@ export async function securePaste() {
             try {
 
                 const decoded = decodeSecret(token);
-
-                text = text.replace(token, decoded);
+                // Replace ALL instances of the copied secret
+                text = text.replaceAll(token, decoded);
 
             } catch (err) {
 
@@ -81,7 +81,8 @@ export async function securePaste() {
     }
 
     editor.edit(editBuilder => {
-        editBuilder.insert(editor.selection.start, text);
+        // Replace the current selection with the pasted text (native behavior)
+        editBuilder.replace(editor.selection, text);
     });
 
 }

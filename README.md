@@ -8,3 +8,4 @@ Features
 - Encode sensitive values
 - Secure clipboard
 - Local secret storage
+password = "sk-123"

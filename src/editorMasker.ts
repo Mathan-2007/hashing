@@ -17,7 +17,9 @@ export async function maskEditorSecrets(editor: vscode.TextEditor) {
     const document = editor.document;
     const text = document.getText();
 
-    const secrets = detectSecrets(text);
+    const rawSecrets = detectSecrets(text);
+    // Deduplicate secrets to avoid overlapping edit exceptions
+    const secrets = Array.from(new Set(rawSecrets));
 
     if (secrets.length === 0) return;
 
@@ -25,7 +27,7 @@ export async function maskEditorSecrets(editor: vscode.TextEditor) {
 
         for (const secret of secrets) {
 
-            if (secret.startsWith("ENC_")) continue;
+            if (secret.startsWith("HIDDEN_SECRET_DO_NOT_DECODE_")) continue;
 
             const encoded = encodeSecret(secret);
 
@@ -51,31 +53,26 @@ export async function maskEditorSecrets(editor: vscode.TextEditor) {
 
 /*
 RESTORE ORIGINAL SECRETS
-Used when saving file
+Returns an array of TextEdits to be used with event.waitUntil() 
 */
-export async function restoreEditorSecrets(editor: vscode.TextEditor) {
+export async function restoreEditorSecrets(editor: vscode.TextEditor): Promise<vscode.TextEdit[]> {
 
     const document = editor.document;
     const text = document.getText();
+    const edits: vscode.TextEdit[] = [];
 
-    await editor.edit(editBuilder => {
+    for (const [encoded, original] of maskedSecrets.entries()) {
+        let index = text.indexOf(encoded);
 
-        for (const [encoded, original] of maskedSecrets.entries()) {
+        while (index !== -1) {
+            const start = document.positionAt(index);
+            const end = document.positionAt(index + encoded.length);
 
-            let index = text.indexOf(encoded);
+            edits.push(vscode.TextEdit.replace(new vscode.Range(start, end), original));
 
-            while (index !== -1) {
-
-                const start = document.positionAt(index);
-                const end = document.positionAt(index + encoded.length);
-
-                editBuilder.replace(new vscode.Range(start, end), original);
-
-                index = text.indexOf(encoded, index + encoded.length);
-            }
-
+            index = text.indexOf(encoded, index + encoded.length);
         }
+    }
 
-    });
-
+    return edits;
 }

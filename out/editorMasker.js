@@ -16,12 +16,14 @@ This replaces secrets with encrypted tokens
 async function maskEditorSecrets(editor) {
     const document = editor.document;
     const text = document.getText();
-    const secrets = (0, secretDetector_1.detectSecrets)(text);
+    const rawSecrets = (0, secretDetector_1.detectSecrets)(text);
+    // Deduplicate secrets to avoid overlapping edit exceptions
+    const secrets = Array.from(new Set(rawSecrets));
     if (secrets.length === 0)
         return;
     await editor.edit(editBuilder => {
         for (const secret of secrets) {
-            if (secret.startsWith("ENC_"))
+            if (secret.startsWith("HIDDEN_SECRET_DO_NOT_DECODE_"))
                 continue;
             const encoded = (0, encoder_1.encodeSecret)(secret);
             maskedSecrets.set(encoded, secret);
@@ -37,21 +39,21 @@ async function maskEditorSecrets(editor) {
 }
 /*
 RESTORE ORIGINAL SECRETS
-Used when saving file
+Returns an array of TextEdits to be used with event.waitUntil()
 */
 async function restoreEditorSecrets(editor) {
     const document = editor.document;
     const text = document.getText();
-    await editor.edit(editBuilder => {
-        for (const [encoded, original] of maskedSecrets.entries()) {
-            let index = text.indexOf(encoded);
-            while (index !== -1) {
-                const start = document.positionAt(index);
-                const end = document.positionAt(index + encoded.length);
-                editBuilder.replace(new vscode.Range(start, end), original);
-                index = text.indexOf(encoded, index + encoded.length);
-            }
+    const edits = [];
+    for (const [encoded, original] of maskedSecrets.entries()) {
+        let index = text.indexOf(encoded);
+        while (index !== -1) {
+            const start = document.positionAt(index);
+            const end = document.positionAt(index + encoded.length);
+            edits.push(vscode.TextEdit.replace(new vscode.Range(start, end), original));
+            index = text.indexOf(encoded, index + encoded.length);
         }
-    });
+    }
+    return edits;
 }
 //# sourceMappingURL=editorMasker.js.map

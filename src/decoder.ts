@@ -1,13 +1,13 @@
 import * as crypto from "crypto";
-import { SESSION_KEY } from "./cryptoSession";
+import { getSessionKey } from "./cryptoSession";
 
 /*
 Decode encrypted secret token
-Format expected: ENC_<IV>:<encrypted_data>
+Format expected: HIDDEN_SECRET_DO_NOT_DECODE_<IV>:<encrypted_data>
 */
 export function decodeSecret(token: string): string {
 
-    const value = token.replace("ENC_", "");
+    const value = token.replace("HIDDEN_SECRET_DO_NOT_DECODE_", "");
 
     const parts = value.split(":");
 
@@ -18,9 +18,11 @@ export function decodeSecret(token: string): string {
     const iv = Buffer.from(parts[0], "base64");
     const encrypted = parts[1];
 
+    const sessionKey = getSessionKey();
+
     const decipher = crypto.createDecipheriv(
         "aes-256-cbc",
-        SESSION_KEY,
+        sessionKey,
         iv
     );
 
