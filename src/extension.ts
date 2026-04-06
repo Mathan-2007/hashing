@@ -1,168 +1,171 @@
 import * as vscode from "vscode";
-import * as crypto from "crypto";
-import { detectSecrets } from "./secretDetector";
 import { maskEditorSecrets, restoreEditorSecrets } from "./editorMasker";
+import { secureCopy, securePaste } from "./clipboardGuard";
+
+import { initCryptoSession } from "./cryptoSession";
+import { lockWorkspace, unlockWorkspace } from "./workspaceLocker";
 
 /*
-SESSION KEY
-Generated every time VS Code starts
+Prevent infinite masking loops
 */
-const SESSION_KEY = crypto.randomBytes(32);
-const IV = crypto.randomBytes(16);
+let masking = false;
+let blurTimeout: NodeJS.Timeout | null = null;
+let aiMode = false;
+let statusBarItem: vscode.StatusBarItem;
 
-/*
-AES ENCODE
-*/
-function encodeSecret(text: string): string {
+export async function activate(context: vscode.ExtensionContext) {
 
-    const cipher = crypto.createCipheriv(
-        "aes-256-cbc",
-        SESSION_KEY,
-        IV
+    statusBarItem = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Left
     );
+    statusBarItem.text = "🔓 DevLeakShield";
+    statusBarItem.command = "devLeakShield.toggleAiMode";
+    statusBarItem.show();
 
-    let encrypted = cipher.update(text, "utf8", "base64");
-    encrypted += cipher.final("base64");
-
-    return "ENC_" + encrypted;
-}
-
-/*
-AES DECODE
-*/
-function decodeSecret(text: string): string {
-
-    const value = text.replace("ENC_", "");
-
-    const decipher = crypto.createDecipheriv(
-        "aes-256-cbc",
-        SESSION_KEY,
-        IV
-    );
-
-    let decrypted = decipher.update(value, "base64", "utf8");
-    decrypted += decipher.final("utf8");
-
-    return decrypted;
-}
-
-/*
-EXTENSION START
-*/
-export function activate(context: vscode.ExtensionContext) {
+    // 🔥 TEMP KEY (remove context if you changed crypto)
+    initCryptoSession();
 
     console.log("DevLeakShield activated");
 
     /*
-    COPY INTERCEPT
+    SECURE COPY COMMAND
     */
-    const copyCommand = vscode.commands.registerCommand(
-        "devLeakShield.secureCopy",
-        async () => {
-
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) return;
-
-            let text = editor.document.getText(editor.selection);
-
-            // If nothing selected copy current line
-            if (!text) {
-                const line = editor.document.lineAt(editor.selection.active.line);
-                text = line.text;
-            }
-
-            const secrets = detectSecrets(text);
-
-            for (let secret of secrets) {
-
-                const encoded = encodeSecret(secret);
-
-                text = text.replace(secret, encoded);
-            }
-
-            await vscode.env.clipboard.writeText(text);
-
-            vscode.window.showInformationMessage("Secrets encoded before copy");
-        }
+    context.subscriptions.push(
+        vscode.commands.registerCommand("devLeakShield.secureCopy", async () => {
+            await secureCopy();
+        })
     );
 
     /*
-    PASTE INTERCEPT
+    SECURE PASTE COMMAND
     */
-    const pasteCommand = vscode.commands.registerCommand(
-        "devLeakShield.securePaste",
-        async () => {
+    context.subscriptions.push(
+        vscode.commands.registerCommand("devLeakShield.securePaste", async () => {
+            await securePaste();
+        })
+    );
 
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) return;
+    context.subscriptions.push(
+    vscode.commands.registerCommand("devLeakShield.toggleAiMode", async () => {
 
-            let text = await vscode.env.clipboard.readText();
+        aiMode = !aiMode;
 
-            const matches = text.match(/ENC_[A-Za-z0-9+/=]+/g);
+        masking = true;
 
-            if (matches) {
+        try {
+            if (aiMode) {
+                await lockWorkspace();
+                statusBarItem.text = "🔒 AI Mode ON";
+                vscode.window.showInformationMessage("AI Mode Enabled (Secrets Protected)");
+            } else {
+                await unlockWorkspace();
+                statusBarItem.text = "🔓 AI Mode OFF";
+                vscode.window.showInformationMessage("AI Mode Disabled (Secrets Restored)");
+            }
+        } catch (err) {
+            console.log("AI Mode toggle failed:", err);
+        } finally {
+            masking = false;
+        }
 
-                for (let token of matches) {
+    })
+);
 
-                    try {
+    /*
+    WORKSPACE AI LOCK COMMANDS
+    */
+    context.subscriptions.push(
+        vscode.commands.registerCommand("devLeakShield.maskSecrets", async () => {
+            masking = true;
+            try {
+                await lockWorkspace();
+                vscode.window.showInformationMessage("Workspace Locked for AI");
+            } finally {
+                masking = false;
+            }
+        })
+    );
 
-                        const decoded = decodeSecret(token);
+    context.subscriptions.push(
+        vscode.commands.registerCommand("devLeakShield.restoreSecrets", async () => {
+            masking = true;
+            try {
+                await unlockWorkspace();
+                vscode.window.showInformationMessage("Workspace Unlocked securely");
+            } finally {
+                masking = false;
+            }
+        })
+    );
 
-                        text = text.replace(token, decoded);
+    // ✅🔥 CRITICAL: Restore secrets before saving
+    context.subscriptions.push(
+        vscode.workspace.onWillSaveTextDocument(async () => {
 
-                    } catch (err) {
+            if (masking) return;
 
-                        console.log("Decode failed:", err);
+            try {
+                for (const editor of vscode.window.visibleTextEditors) {
 
-                    }
+                    const edits = await restoreEditorSecrets(editor);
+                    if (edits.length === 0) continue;
+
+                    await editor.edit(editBuilder => {
+                        for (const edit of edits) {
+                            editBuilder.replace(edit.range, edit.newText);
+                        }
+                    });
                 }
+
+                console.log("Secrets restored before save");
+
+            } catch (err) {
+                console.log("Restore failed:", err);
+            }
+        })
+    );
+
+
+    // 🔥 ADD THIS HERE (inside activate, before closing bracket)
+    context.subscriptions.push(
+        vscode.window.onDidChangeWindowState((state) => {
+
+            if (masking) return;
+            if (state.focused) return;
+
+            // 🧠 debounce (wait 500ms before running)
+            if (blurTimeout) {
+                clearTimeout(blurTimeout);
             }
 
-            editor.edit(editBuilder => {
-                editBuilder.insert(editor.selection.start, text);
-            });
+            blurTimeout = setTimeout(async () => {
 
-        }
+                try {
+                    for (const editor of vscode.window.visibleTextEditors) {
+
+                        const edits = await restoreEditorSecrets(editor);
+                        if (edits.length === 0) continue;
+
+                        await editor.edit(editBuilder => {
+                            for (const edit of edits) {
+                                editBuilder.replace(edit.range, edit.newText);
+                            }
+                        });
+                    }
+
+                    console.log("Secrets restored on window blur");
+
+                } catch (err) {
+                    console.log("Blur restore failed:", err);
+                }
+
+            }, 500); // delay to avoid spam
+        })
     );
 
-    /*
-    MASK SECRETS IN EDITOR (for Copilot / AI tools)
-    */
-    const maskCommand = vscode.commands.registerCommand(
-        "devLeakShield.maskSecrets",
-        async () => {
-
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) return;
-
-            await maskEditorSecrets(editor);
-
-            vscode.window.showInformationMessage("Secrets masked for AI tools");
-
-        }
-    );
-
-    /*
-    RESTORE ORIGINAL SECRETS
-    */
-    const restoreCommand = vscode.commands.registerCommand(
-        "devLeakShield.restoreSecrets",
-        async () => {
-
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) return;
-
-            await restoreEditorSecrets(editor);
-
-            vscode.window.showInformationMessage("Secrets restored");
-
-        }
-    );
-
-    context.subscriptions.push(copyCommand);
-    context.subscriptions.push(pasteCommand);
-    context.subscriptions.push(maskCommand);
-    context.subscriptions.push(restoreCommand);
 }
 
-export function deactivate() {}
+/*
+EXTENSION STOP
+*/
+export function deactivate() { }

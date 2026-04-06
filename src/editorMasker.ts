@@ -3,33 +3,48 @@ import { detectSecrets } from "./secretDetector";
 import { encodeSecret } from "./encoder";
 import { decodeSecret } from "./decoder";
 
-let maskedSecrets: Map<string,string> = new Map();
+/*
+Store mapping between encoded value and original secret
+*/
+const maskedSecrets: Map<string, string> = new Map();
 
 /*
 MASK SECRETS IN EDITOR
+This replaces secrets with encrypted tokens
 */
 export async function maskEditorSecrets(editor: vscode.TextEditor) {
 
-    const text = editor.document.getText();
+    const document = editor.document;
+    const text = document.getText();
 
-    const secrets = detectSecrets(text);
+    const rawSecrets = detectSecrets(text);
+    // Deduplicate secrets to avoid overlapping edit exceptions
+    const secrets = Array.from(new Set(rawSecrets));
+
+    if (secrets.length === 0) return;
 
     await editor.edit(editBuilder => {
 
-        for (let secret of secrets) {
+        for (const secret of secrets) {
+
+            if (secret.startsWith("HIDDEN_SECRET_DO_NOT_DECODE_")) continue;
 
             const encoded = encodeSecret(secret);
 
             maskedSecrets.set(encoded, secret);
 
-            const startIndex = text.indexOf(secret);
+            let index = text.indexOf(secret);
 
-            if (startIndex === -1) continue;
+            while (index !== -1) {
 
-            const start = editor.document.positionAt(startIndex);
-            const end = editor.document.positionAt(startIndex + secret.length);
+                const start = document.positionAt(index);
+                const end = document.positionAt(index + secret.length);
 
-            editBuilder.replace(new vscode.Range(start,end), encoded);
+                editBuilder.replace(new vscode.Range(start, end), encoded);
+
+                index = text.indexOf(secret, index + secret.length);
+            }
+
         }
 
     });
@@ -37,27 +52,27 @@ export async function maskEditorSecrets(editor: vscode.TextEditor) {
 }
 
 /*
-RESTORE ORIGINAL VALUES
+RESTORE ORIGINAL SECRETS
+Returns an array of TextEdits to be used with event.waitUntil() 
 */
-export async function restoreEditorSecrets(editor: vscode.TextEditor) {
+export async function restoreEditorSecrets(editor: vscode.TextEditor): Promise<vscode.TextEdit[]> {
 
-    const text = editor.document.getText();
+    const document = editor.document;
+    const text = document.getText();
+    const edits: vscode.TextEdit[] = [];
 
-    await editor.edit(editBuilder => {
+    for (const [encoded, original] of maskedSecrets.entries()) {
+        let index = text.indexOf(encoded);
 
-        for (let [encoded, original] of maskedSecrets.entries()) {
+        while (index !== -1) {
+            const start = document.positionAt(index);
+            const end = document.positionAt(index + encoded.length);
 
-            const startIndex = text.indexOf(encoded);
+            edits.push(vscode.TextEdit.replace(new vscode.Range(start, end), original));
 
-            if (startIndex === -1) continue;
-
-            const start = editor.document.positionAt(startIndex);
-            const end = editor.document.positionAt(startIndex + encoded.length);
-
-            editBuilder.replace(new vscode.Range(start,end), original);
-
+            index = text.indexOf(encoded, index + encoded.length);
         }
+    }
 
-    });
-
+    return edits;
 }

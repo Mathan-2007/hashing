@@ -4,14 +4,13 @@
   "description": "Protect secrets when copying code to AI chatbots",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.110.0"
   },
   "categories": [
     "Other"
   ],
   "activationEvents": [
-    "onCommand:devLeakShield.secureCopy",
-    "onCommand:devLeakShield.securePaste"
+    "*"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -25,9 +24,18 @@
         "command": "devLeakShield.securePaste",
         "key": "ctrl+v",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "devLeakShield.toggleAiMode",
+        "key": "ctrl+shift+m",
+        "when": "editorTextFocus"
       }
     ],
     "commands": [
+      {
+        "command": "devLeakShield.toggleAiMode",
+        "title": "Toggle AI Mode"
+      },
       {
         "command": "devLeakShield.secureCopy",
         "title": "Secure Copy"

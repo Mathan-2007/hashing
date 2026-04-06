@@ -1,13 +1,26 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IV = exports.SESSION_KEY = void 0;
+exports.initCryptoSession = initCryptoSession;
+exports.getSessionKey = getSessionKey;
 const crypto = require("crypto");
 /*
-Session key generated when extension loads
+Initializes the master encryption key from VS Code's secure keychain.
+Generates a new one if it is the first time running.
 */
-exports.SESSION_KEY = crypto.randomBytes(32);
+let SESSION_KEY;
+function initCryptoSession() {
+    if (!SESSION_KEY) {
+        console.log("DevLeakShield: Generating TEMP session key");
+        SESSION_KEY = crypto.randomBytes(32);
+    }
+}
 /*
-Initialization vector
+Retrieves the loaded session key synchronously
 */
-exports.IV = crypto.randomBytes(16);
+function getSessionKey() {
+    if (!SESSION_KEY) {
+        throw new Error("Session key not initialized");
+    }
+    return SESSION_KEY;
+}
 //# sourceMappingURL=cryptoSession.js.map

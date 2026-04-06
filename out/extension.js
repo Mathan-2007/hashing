@@ -3,108 +3,135 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = require("vscode");
-const crypto = require("crypto");
-const secretDetector_1 = require("./secretDetector");
 const editorMasker_1 = require("./editorMasker");
+const clipboardGuard_1 = require("./clipboardGuard");
+const cryptoSession_1 = require("./cryptoSession");
+const workspaceLocker_1 = require("./workspaceLocker");
 /*
-SESSION KEY
-Generated every time VS Code starts
+Prevent infinite masking loops
 */
-const SESSION_KEY = crypto.randomBytes(32);
-const IV = crypto.randomBytes(16);
-/*
-AES ENCODE
-*/
-function encodeSecret(text) {
-    const cipher = crypto.createCipheriv("aes-256-cbc", SESSION_KEY, IV);
-    let encrypted = cipher.update(text, "utf8", "base64");
-    encrypted += cipher.final("base64");
-    return "ENC_" + encrypted;
-}
-/*
-AES DECODE
-*/
-function decodeSecret(text) {
-    const value = text.replace("ENC_", "");
-    const decipher = crypto.createDecipheriv("aes-256-cbc", SESSION_KEY, IV);
-    let decrypted = decipher.update(value, "base64", "utf8");
-    decrypted += decipher.final("utf8");
-    return decrypted;
-}
-/*
-EXTENSION START
-*/
-function activate(context) {
+let masking = false;
+let blurTimeout = null;
+let aiMode = false;
+let statusBarItem;
+async function activate(context) {
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+    statusBarItem.text = "🔓 DevLeakShield";
+    statusBarItem.command = "devLeakShield.toggleAiMode";
+    statusBarItem.show();
+    // 🔥 TEMP KEY (remove context if you changed crypto)
+    (0, cryptoSession_1.initCryptoSession)();
     console.log("DevLeakShield activated");
     /*
-    COPY INTERCEPT
+    SECURE COPY COMMAND
     */
-    const copyCommand = vscode.commands.registerCommand("devLeakShield.secureCopy", async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor)
-            return;
-        let text = editor.document.getText(editor.selection);
-        // If nothing selected copy current line
-        if (!text) {
-            const line = editor.document.lineAt(editor.selection.active.line);
-            text = line.text;
-        }
-        const secrets = (0, secretDetector_1.detectSecrets)(text);
-        for (let secret of secrets) {
-            const encoded = encodeSecret(secret);
-            text = text.replace(secret, encoded);
-        }
-        await vscode.env.clipboard.writeText(text);
-        vscode.window.showInformationMessage("Secrets encoded before copy");
-    });
+    context.subscriptions.push(vscode.commands.registerCommand("devLeakShield.secureCopy", async () => {
+        await (0, clipboardGuard_1.secureCopy)();
+    }));
     /*
-    PASTE INTERCEPT
+    SECURE PASTE COMMAND
     */
-    const pasteCommand = vscode.commands.registerCommand("devLeakShield.securePaste", async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor)
-            return;
-        let text = await vscode.env.clipboard.readText();
-        const matches = text.match(/ENC_[A-Za-z0-9+/=]+/g);
-        if (matches) {
-            for (let token of matches) {
-                try {
-                    const decoded = decodeSecret(token);
-                    text = text.replace(token, decoded);
-                }
-                catch (err) {
-                    console.log("Decode failed:", err);
-                }
+    context.subscriptions.push(vscode.commands.registerCommand("devLeakShield.securePaste", async () => {
+        await (0, clipboardGuard_1.securePaste)();
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("devLeakShield.toggleAiMode", async () => {
+        aiMode = !aiMode;
+        masking = true;
+        try {
+            if (aiMode) {
+                await (0, workspaceLocker_1.lockWorkspace)();
+                statusBarItem.text = "🔒 AI Mode ON";
+                vscode.window.showInformationMessage("AI Mode Enabled (Secrets Protected)");
+            }
+            else {
+                await (0, workspaceLocker_1.unlockWorkspace)();
+                statusBarItem.text = "🔓 AI Mode OFF";
+                vscode.window.showInformationMessage("AI Mode Disabled (Secrets Restored)");
             }
         }
-        editor.edit(editBuilder => {
-            editBuilder.insert(editor.selection.start, text);
-        });
-    });
+        catch (err) {
+            console.log("AI Mode toggle failed:", err);
+        }
+        finally {
+            masking = false;
+        }
+    }));
     /*
-    MASK SECRETS IN EDITOR (for Copilot / AI tools)
+    WORKSPACE AI LOCK COMMANDS
     */
-    const maskCommand = vscode.commands.registerCommand("devLeakShield.maskSecrets", async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor)
+    context.subscriptions.push(vscode.commands.registerCommand("devLeakShield.maskSecrets", async () => {
+        masking = true;
+        try {
+            await (0, workspaceLocker_1.lockWorkspace)();
+            vscode.window.showInformationMessage("Workspace Locked for AI");
+        }
+        finally {
+            masking = false;
+        }
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("devLeakShield.restoreSecrets", async () => {
+        masking = true;
+        try {
+            await (0, workspaceLocker_1.unlockWorkspace)();
+            vscode.window.showInformationMessage("Workspace Unlocked securely");
+        }
+        finally {
+            masking = false;
+        }
+    }));
+    // ✅🔥 CRITICAL: Restore secrets before saving
+    context.subscriptions.push(vscode.workspace.onWillSaveTextDocument(async () => {
+        if (masking)
             return;
-        await (0, editorMasker_1.maskEditorSecrets)(editor);
-        vscode.window.showInformationMessage("Secrets masked for AI tools");
-    });
-    /*
-    RESTORE ORIGINAL SECRETS
-    */
-    const restoreCommand = vscode.commands.registerCommand("devLeakShield.restoreSecrets", async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor)
+        try {
+            for (const editor of vscode.window.visibleTextEditors) {
+                const edits = await (0, editorMasker_1.restoreEditorSecrets)(editor);
+                if (edits.length === 0)
+                    continue;
+                await editor.edit(editBuilder => {
+                    for (const edit of edits) {
+                        editBuilder.replace(edit.range, edit.newText);
+                    }
+                });
+            }
+            console.log("Secrets restored before save");
+        }
+        catch (err) {
+            console.log("Restore failed:", err);
+        }
+    }));
+    // 🔥 ADD THIS HERE (inside activate, before closing bracket)
+    context.subscriptions.push(vscode.window.onDidChangeWindowState((state) => {
+        if (masking)
             return;
-        await (0, editorMasker_1.restoreEditorSecrets)(editor);
-        vscode.window.showInformationMessage("Secrets restored");
-    });
-    context.subscriptions.push(copyCommand);
-    context.subscriptions.push(pasteCommand);
-    context.subscriptions.push(maskCommand);
-    context.subscriptions.push(restoreCommand);
+        if (state.focused)
+            return;
+        // 🧠 debounce (wait 500ms before running)
+        if (blurTimeout) {
+            clearTimeout(blurTimeout);
+        }
+        blurTimeout = setTimeout(async () => {
+            try {
+                for (const editor of vscode.window.visibleTextEditors) {
+                    const edits = await (0, editorMasker_1.restoreEditorSecrets)(editor);
+                    if (edits.length === 0)
+                        continue;
+                    await editor.edit(editBuilder => {
+                        for (const edit of edits) {
+                            editBuilder.replace(edit.range, edit.newText);
+                        }
+                    });
+                }
+                console.log("Secrets restored on window blur");
+            }
+            catch (err) {
+                console.log("Blur restore failed:", err);
+            }
+        }, 500); // delay to avoid spam
+    }));
 }
+/*
+EXTENSION STOP
+*/
 function deactivate() { }
 //# sourceMappingURL=extension.js.map
