@@ -24,9 +24,18 @@
         "command": "devLeakShield.securePaste",
         "key": "ctrl+v",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "devLeakShield.toggleAiMode",
+        "key": "ctrl+shift+m",
+        "when": "editorTextFocus"
       }
     ],
     "commands": [
+      {
+        "command": "devLeakShield.toggleAiMode",
+        "title": "Toggle AI Mode"
+      },
       {
         "command": "devLeakShield.secureCopy",
         "title": "Secure Copy"

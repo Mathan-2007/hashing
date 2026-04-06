@@ -17,7 +17,6 @@ async function secureCopy() {
     let selection = editor.selection;
     let text = "";
     if (selection.isEmpty) {
-        // copy current line if nothing selected
         const line = editor.document.lineAt(selection.active.line);
         text = line.text;
     }
@@ -48,7 +47,6 @@ async function securePaste() {
         for (let token of matches) {
             try {
                 const decoded = (0, decoder_1.decodeSecret)(token);
-                // Replace ALL instances of the copied secret
                 text = text.replaceAll(token, decoded);
             }
             catch (err) {
@@ -57,7 +55,6 @@ async function securePaste() {
         }
     }
     editor.edit(editBuilder => {
-        // Replace the current selection with the pasted text (native behavior)
         editBuilder.replace(editor.selection, text);
     });
 }

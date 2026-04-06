@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { detectSecrets } from "./secretDetector";
 import { encodeSecret } from "./encoder";
 import { decodeSecret } from "./decoder";
+import { restoreEditorSecrets } from "./editorMasker";
 
 /*
 SECURE COPY
@@ -16,27 +17,19 @@ export async function secureCopy() {
     let text = "";
 
     if (selection.isEmpty) {
-
-        // copy current line if nothing selected
         const line = editor.document.lineAt(selection.active.line);
         text = line.text;
-
     } else {
-
         text = editor.document.getText(selection);
-
     }
 
     const secrets = detectSecrets(text);
 
     for (let secret of secrets) {
-
         if (secret.startsWith("HIDDEN_SECRET_DO_NOT_DECODE_")) continue;
 
         const encoded = encodeSecret(secret);
-
         text = text.replaceAll(secret, encoded);
-
     }
 
     await vscode.env.clipboard.writeText(text);
@@ -44,9 +37,7 @@ export async function secureCopy() {
     vscode.window.showInformationMessage(
         "DevLeakShield: secrets encoded before copy"
     );
-
 }
-
 /*
 SECURE PASTE
 Decodes encrypted tokens when pasting
@@ -61,28 +52,17 @@ export async function securePaste() {
     const matches = text.match(/HIDDEN_SECRET_DO_NOT_DECODE_[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+/g);
 
     if (matches) {
-
         for (let token of matches) {
-
             try {
-
                 const decoded = decodeSecret(token);
-                // Replace ALL instances of the copied secret
                 text = text.replaceAll(token, decoded);
-
             } catch (err) {
-
                 console.log("DevLeakShield decode failed:", err);
-
             }
-
         }
-
     }
 
     editor.edit(editBuilder => {
-        // Replace the current selection with the pasted text (native behavior)
         editBuilder.replace(editor.selection, text);
     });
-
 }
